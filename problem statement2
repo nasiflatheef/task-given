@@ -1,0 +1,68 @@
+#include <stdio.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+
+uint8_t G_DataID;
+int32_t G_DataValue;
+
+TaskHandle_t TaskHandle_1;
+TaskHandle_t TaskHandle_2;
+
+QueueHandle_t Queue1;
+
+typedef struct {
+    uint8_t dataID;
+    int32_t DataValue;
+} Data_t;
+
+void ExampleTask1(void *pV);
+void ExampleTask2(void *pV);
+
+int main(void) {
+    // Create the queue
+    Queue1 = xQueueCreate(5, sizeof(Data_t));
+    if (Queue1 == NULL) {
+        printf("Failed to create queue\n");
+        return 1;
+    }
+
+    xTaskCreate(ExampleTask1, "Task1", configMINIMAL_STACK_SIZE, NULL, 1, &TaskHandle_1);
+    xTaskCreate(ExampleTask2, "Task2", configMINIMAL_STACK_SIZE, NULL, 1, &TaskHandle_2);
+
+    vTaskStartScheduler();
+
+    return 0;
+}
+
+void ExampleTask1(void *pV) {
+    Data_t data;
+    for (;;) {
+        data.dataID = G_DataID;
+        data.DataValue = G_DataValue;
+        xQueueSend(Queue1, &data, portMAX_DELAY);
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+
+void ExampleTask2(void *pV) {
+    Data_t data;
+    UBaseType_t originalPriority = uxTaskPriorityGet(NULL);
+    for (;;) {
+        if (xQueueReceive(Queue1, &data, portMAX_DELAY) == pdPASS) {
+            printf("Received Data - dataID: %d, DataValue: %d\n", data.dataID, data.DataValue);
+
+            if (data.dataID == 0) {
+                vTaskDelete(NULL);
+            } else if (data.dataID == 1) {
+                if (data.DataValue == 0) {
+                    vTaskPrioritySet(NULL, originalPriority + 2);
+                } else if (data.DataValue == 1) {
+                    vTaskPrioritySet(NULL, originalPriority);
+                } else if (data.DataValue == 2) {
+                    vTaskDelete(NULL);
+                }
+            }
+        }
+    }
+}
