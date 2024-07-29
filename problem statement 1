@@ -1,0 +1,39 @@
+#include <stdint.h>
+
+#define NUM_DI_PINS 8
+#define DEBOUNCE_COUNT 10
+
+extern volatile uint8_t g_ReadDIpinSts;
+volatile uint8_t g_AppDIpinSts = 0;
+
+static uint8_t s_prevReadDIpinSts = 0;
+static uint8_t s_debounceCounts[NUM_DI_PINS] = {0};
+
+int ISR_DIsampling() {
+    uint8_t changedPins;
+    uint8_t stablePins = 0;
+
+    changedPins = g_ReadDIpinSts ^ s_prevReadDIpinSts;
+    
+    s_prevReadDIpinSts = g_ReadDIpinSts;
+
+    for (int i = 0; i < NUM_DI_PINS; i++) {
+        uint8_t mask = 1 << i;
+        
+        if (changedPins & mask) {
+            s_debounceCounts[i] = 0;
+        } else {
+            if (s_debounceCounts[i] < DEBOUNCE_COUNT) {
+                s_debounceCounts[i]++;
+            }
+            
+            if (s_debounceCounts[i] >= DEBOUNCE_COUNT) {
+                stablePins |= mask;
+            }
+        }
+    }
+
+    g_AppDIpinSts = (g_AppDIpinSts & ~stablePins) | (g_ReadDIpinSts & stablePins);
+
+    return 0;
+}
